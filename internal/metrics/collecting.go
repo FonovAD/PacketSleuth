@@ -3,7 +3,6 @@ package metrics
 import (
 	"log"
 	"net"
-	"strings"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -23,15 +22,6 @@ const (
 	DNS                = "DNS"
 	SCTP               = "SCTP"
 	HTTP               = "HTTP"
-)
-
-const (
-	GET     = "GET"
-	POST    = "POST"
-	HEAD    = "HEAD"
-	PUT     = "PUT"
-	DELETE  = "DELETE"
-	OPTIONS = "OPTIONS"
 )
 
 type MetricMonitor struct {
@@ -104,13 +94,6 @@ func capturePackets(deviceName string, pchan chan<- Packet) {
 	}
 }
 
-func isHTTPPayload(payload []byte) bool {
-	payloadStr := string(payload)
-	return strings.HasPrefix(payloadStr, GET) || strings.HasPrefix(payloadStr, POST) ||
-		strings.HasPrefix(payloadStr, HEAD) || strings.HasPrefix(payloadStr, PUT) ||
-		strings.HasPrefix(payloadStr, DELETE) || strings.HasPrefix(payloadStr, OPTIONS)
-}
-
 func getDNSLayer(packet gopacket.Packet) *layers.DNS {
 	var dns layers.DNS
 	err := dns.DecodeFromBytes(packet.Layer(layers.LayerTypeDNS).LayerContents(), gopacket.NilDecodeFeedback)
@@ -172,9 +155,7 @@ func processPacket(packet gopacket.Packet) *Packet {
 			packetInfo.DstPort = uint16(layer.DstPort)
 			packetInfo.PayloadSize = len(layer.Payload)
 			if packetInfo.SrcPort == 80 || packetInfo.DstPort == 80 || packetInfo.SrcPort == 443 || packetInfo.DstPort == 443 {
-				if isHTTPPayload(layer.Payload) {
-					packetInfo.Application = HTTP
-				}
+				packetInfo.Application = HTTP
 			}
 		case *layers.UDP:
 			packetInfo.TransportType = UDP
