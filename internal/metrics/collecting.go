@@ -3,6 +3,7 @@ package metrics
 import (
 	"log"
 	"net"
+	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -29,6 +30,7 @@ type MetricMonitor struct {
 }
 
 type Packet struct {
+	TimeStamp     time.Time
 	LinkType      string
 	SrcMAC        net.HardwareAddr
 	DstMAC        net.HardwareAddr
@@ -43,6 +45,8 @@ type Packet struct {
 	IsMalformed   bool
 	ARPInfo       *ARPInfo
 	SCTPInfo      *SCTPInfo
+	IsSYN         bool
+	IsSYNACK      bool
 }
 
 type ARPInfo struct {
@@ -154,6 +158,10 @@ func processPacket(packet gopacket.Packet) *Packet {
 			packetInfo.SrcPort = uint16(layer.SrcPort)
 			packetInfo.DstPort = uint16(layer.DstPort)
 			packetInfo.PayloadSize = len(layer.Payload)
+
+			packetInfo.IsSYN = layer.SYN
+			packetInfo.IsSYNACK = layer.SYN && layer.ACK
+
 			if packetInfo.SrcPort == 80 || packetInfo.DstPort == 80 || packetInfo.SrcPort == 443 || packetInfo.DstPort == 443 {
 				packetInfo.Application = HTTP
 			}
@@ -184,5 +192,6 @@ func processPacket(packet gopacket.Packet) *Packet {
 	if packet.ErrorLayer() != nil {
 		packetInfo.IsMalformed = true
 	}
+	packetInfo.TimeStamp = time.Now()
 	return packetInfo
 }
