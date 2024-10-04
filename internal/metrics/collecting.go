@@ -61,7 +61,7 @@ type SCTPInfo struct {
 	DstPort uint16
 }
 
-func NewMetricMonitor() *MetricMonitor {
+func NewPacketMonitor() *MetricMonitor {
 	devices, err := pcap.FindAllDevs()
 	if err != nil {
 		log.Fatal(err)
@@ -77,8 +77,6 @@ func (m *MetricMonitor) Listen() <-chan Packet {
 	for _, device := range m.devices {
 		go capturePackets(device.Name, pchan)
 	}
-	lock := make(chan bool)
-	lock <- true
 	return pchan
 }
 
