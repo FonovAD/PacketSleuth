@@ -84,11 +84,7 @@ func (m *Monitor) Start() {
 func (m *Monitor) monitoringPacket(cp <-chan Packet) {
 	for p := range cp {
 		packetCount.Inc()
-
-		// Увеличение общего объема трафика
 		trafficTotal.Add(float64(p.PayloadSize))
-
-		// TCP пакеты
 		if p.TransportType == TCP {
 			tcpCount.Inc()
 			if p.IsSYN && p.IsSYNACK {
@@ -98,34 +94,24 @@ func (m *Monitor) monitoringPacket(cp <-chan Packet) {
 			}
 			portSrc.WithLabelValues(string(p.SrcPort)).Inc()
 			portDst.WithLabelValues(string(p.DstPort)).Inc()
-
-			// Трафик по портам для TCP
 			trafficPortSrc.WithLabelValues(string(p.SrcPort)).Add(float64(p.PayloadSize))
 			trafficPortDst.WithLabelValues(string(p.DstPort)).Add(float64(p.PayloadSize))
 		}
-
-		// UDP пакеты
 		if p.TransportType == UDP {
 			udpCount.Inc()
 			portSrc.WithLabelValues(string(p.SrcPort)).Inc()
 			portDst.WithLabelValues(string(p.DstPort)).Inc()
-
-			// Трафик по портам для UDP
 			trafficPortSrc.WithLabelValues(string(p.SrcPort)).Add(float64(p.PayloadSize))
 			trafficPortDst.WithLabelValues(string(p.DstPort)).Add(float64(p.PayloadSize))
 		}
-
-		// SCTP пакеты
 		if p.SCTPInfo != nil {
 			portSrc.WithLabelValues(string(p.SCTPInfo.SrcPort)).Inc()
 			portDst.WithLabelValues(string(p.SCTPInfo.DstPort)).Inc()
 
-			// Трафик по портам для SCTP
 			trafficPortSrc.WithLabelValues(string(p.SCTPInfo.SrcPort)).Add(float64(p.PayloadSize))
 			trafficPortDst.WithLabelValues(string(p.SCTPInfo.DstPort)).Add(float64(p.PayloadSize))
 		}
 
-		// IP пакеты (IPv4 и IPv6)
 		if p.NetworkType == IPv4 || p.NetworkType == IPv6 {
 			ipSrc.WithLabelValues(p.SrcIP.String()).Inc()
 			ipDst.WithLabelValues(p.DstIP.String()).Inc()
