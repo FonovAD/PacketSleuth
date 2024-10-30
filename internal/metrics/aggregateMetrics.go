@@ -1,6 +1,13 @@
 package metrics
 
 import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
+	"github.com/influxdata/influxdb-client-go/v2/api"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -64,24 +71,30 @@ var (
 )
 
 type Monitor struct {
-	packetChan <-chan Packet
+	packetChan   <-chan Packet
+	influxClient influxdb2.Client
+	writeAPI     api.WriteAPIBlocking
 }
 
-func NewMonitor(c <-chan Packet) *Monitor {
+func NewMonitor(c <-chan Packet, influxURL, influxUser, influxPass, influxOrg, influxBucket string) *Monitor {
+	influxclient := influxdb2.NewClient(influxURL, fmt.Sprintf("%s:%s", influxUser, influxPass))
 	return &Monitor{
-		packetChan: c,
+		packetChan:   c,
+		influxClient: influxclient,
+		writeAPI:     influxclient.WriteAPIBlocking(influxOrg, influxBucket),
 	}
 }
 
 func (m *Monitor) Start() {
 	chP := make(chan Packet, 100)
-	go m.monitoringPacket(chP)
+	go m.Prometheus(chP)
 	for p := range m.packetChan {
 		chP <- p
 	}
+	defer m.influxClient.Close()
 }
 
-func (m *Monitor) monitoringPacket(cp <-chan Packet) {
+func (m *Monitor) Prometheus(cp <-chan Packet) {
 	for p := range cp {
 		packetCount.Inc()
 		trafficTotal.Add(float64(p.PayloadSize))
@@ -115,6 +128,42 @@ func (m *Monitor) monitoringPacket(cp <-chan Packet) {
 		if p.NetworkType == IPv4 || p.NetworkType == IPv6 {
 			ipSrc.WithLabelValues(p.SrcIP.String()).Inc()
 			ipDst.WithLabelValues(p.DstIP.String()).Inc()
+		}
+	}
+}
+
+func (m *Monitor) monitoringPacket(cp <-chan Packet) {
+	for p := range cp {
+		tags := map[string]string{
+			"src_port": fmt.Sprint(p.SrcPort),
+			"dst_port": fmt.Sprint(p.DstPort),
+			"src_ip":   p.SrcIP.String(),
+			"dst_ip":   p.DstIP.String(),
+		}
+		fields := map[string]interface{}{
+			"packet_count":  1,
+			"payload_size":  float64(p.PayloadSize),
+			"tcp_count":     0,
+			"udp_count":     0,
+			"traffic_total": float64(p.PayloadSize),
+		}
+
+		if p.TransportType == TCP {
+			fields["tcp_count"] = 1
+		}
+		if p.TransportType == UDP {
+			fields["udp_count"] = 1
+		}
+
+		point := influxdb2.NewPoint(
+			"packetsleuth_metrics",
+			tags,
+			fields,
+			time.Now(), // Временная метка
+		)
+		err := m.writeAPI.WritePoint(context.Background(), point)
+		if err != nil {
+			log.Printf("Error writing to InfluxDB: %v", err)
 		}
 	}
 }
