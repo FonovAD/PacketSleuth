@@ -55,7 +55,7 @@ func TestCreateTable(t *testing.T) {
 
 	result := st.CreateTable(*point)
 
-	assert.Equal(t, 0, result, "CreateTable should return 0")
+	assert.Equal(t, nil, result, "CreateTable should return 0")
 }
 
 func TestWritePoint(t *testing.T) {
@@ -64,7 +64,7 @@ func TestWritePoint(t *testing.T) {
 
 	result := st.WritePoint(*point)
 
-	assert.Equal(t, 0, result, "WritePoint should return 0")
+	assert.Equal(t, nil, result, "WritePoint should return 0")
 	assert.Contains(t, st.DB, point.GetTimeStamp(), "Store should contain the timestamp")
 	assert.Equal(t, st.DB[point.GetTimeStamp()], point.GetValue(), "The point values should match")
 }
@@ -77,11 +77,11 @@ func TestDeletePoint(t *testing.T) {
 	assert.Contains(t, st.DB, point.GetTimeStamp())
 	result := st.DeletePoint(point.GetTimeStamp())
 
-	assert.Equal(t, 0, result, "DeletePoint should return 0")
+	assert.Equal(t, nil, result, "DeletePoint should return 0")
 	assert.NotContains(t, st.DB, point.GetTimeStamp(), "Store should not contain the deleted point")
 
 	result = st.DeletePoint(point.GetTimeStamp())
-	assert.Equal(t, 1, result, "DeletePoint of non-existent point should return 1")
+	assert.NotEqual(t, nil, result, "DeletePoint of non-existent point should return 1")
 }
 
 func TestGetPointOfTime(t *testing.T) {
