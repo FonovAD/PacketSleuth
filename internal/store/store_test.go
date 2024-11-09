@@ -101,7 +101,7 @@ func TestGetPointOfTime(t *testing.T) {
 	assert.Empty(t, points, "Should return no points if no points are in the time range")
 }
 
-func TestGetPointOfValue(t *testing.T) {
+func TestGetPointOfValue_1(t *testing.T) {
 	st := store.InitMockStore()
 
 	point1 := store.NewPoint(time.Now(), map[string]interface{}{"tcpCount": 25})
@@ -115,5 +115,22 @@ func TestGetPointOfValue(t *testing.T) {
 	assert.Contains(t, points, *point1, "Point1 should be included in the result")
 
 	points = st.GetPointOfValue("tcpCount", 35)
+	assert.Empty(t, points, "Should return no points if no points match the value")
+}
+
+func TestGetPointOfValue_2(t *testing.T) {
+	st := store.InitMockStore()
+
+	point1 := store.NewPoint(time.Now(), map[string]interface{}{"tcpCount": 25})
+	point2 := store.NewPoint(time.Now().Add(time.Hour), map[string]interface{}{"tcpCount": 30})
+	st.WritePoint(*point1)
+	st.WritePoint(*point2)
+
+	points := st.GetPointOfValue("tcpCount", 25)
+
+	assert.Len(t, points, 1, "Should return one point with the specified value")
+	assert.Contains(t, points, *point1, "Point1 should be included in the result")
+
+	points = st.GetPointOfValue("tcpCount", "25")
 	assert.Empty(t, points, "Should return no points if no points match the value")
 }

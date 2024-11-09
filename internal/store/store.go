@@ -1,17 +1,18 @@
 package store
 
 import (
+	"errors"
 	"sync"
 	"time"
 )
 
 type Store interface {
 	//Create a table with the fields passed in the structure
-	CreateTable(Point) int
-	WritePoint(Point) int
-	DeletePoint(time.Time) int
+	CreateTable(Point) error
+	WritePoint(Point) error
+	DeletePoint(time.Time) error
 	GetPointOfTime(time.Time, time.Time) []Point
-	GetPointOfValue() []Point
+	GetPointOfValue(string, interface{}) []Point
 }
 
 type Point struct {
@@ -46,29 +47,29 @@ func InitMockStore() *MockStore {
 	}
 }
 
-func (s *MockStore) CreateTable(p Point) int {
+func (s *MockStore) CreateTable(p Point) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return 0
+	return nil
 }
 
-func (s *MockStore) WritePoint(p Point) int {
+func (s *MockStore) WritePoint(p Point) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.DB[p.timestamp] = p.values
-	return 0
+	return nil
 }
 
-func (s *MockStore) DeletePoint(ts time.Time) int {
+func (s *MockStore) DeletePoint(ts time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, in := s.DB[ts]
 	delete(s.DB, ts)
 	_, inAfterDel := s.DB[ts]
 	if in && !inAfterDel {
-		return 0
+		return nil
 	}
-	return 1
+	return errors.New("delete point error")
 }
 
 func (s *MockStore) GetPointOfTime(tsFrom, tsTo time.Time) []Point {
