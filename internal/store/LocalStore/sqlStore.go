@@ -75,6 +75,10 @@ func (s *SqlStore) CreateTable(p store.Point) error {
 	return nil
 }
 
+func (s *SqlStore) Close() error {
+	return s.DB.Close()
+}
+
 // нужно добавить цикл, в котором название полей и значения будут
 // записываться в два массива. Это нужно чтобы они не перемешались,
 // т.к. в Go в типе map значения могут быть перемешаны

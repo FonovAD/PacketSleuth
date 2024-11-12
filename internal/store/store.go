@@ -13,6 +13,7 @@ type Store interface {
 	DeletePoint(time.Time) error
 	GetPointOfTime(time.Time, time.Time) []Point
 	GetPointOfValue(string, interface{}) []Point
+	Close() error
 }
 
 type Point struct {
@@ -50,6 +51,10 @@ func InitMockStore() *MockStore {
 func (s *MockStore) CreateTable(p Point) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return nil
+}
+
+func (s *MockStore) Close() error {
 	return nil
 }
 
