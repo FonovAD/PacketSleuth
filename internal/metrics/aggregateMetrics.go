@@ -1,13 +1,12 @@
 package metrics
 
 import (
-	"context"
 	"fmt"
-	"log"
 	"time"
 
-	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
-	"github.com/influxdata/influxdb-client-go/v2/api"
+	localStore "github.com/FonovAD/PacketSleuth/internal/store/LocalStore"
+
+	"github.com/FonovAD/PacketSleuth/internal/store"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -70,31 +69,73 @@ var (
 	}, []string{"dest_port"})
 )
 
+type Config struct {
+	UsePrometheus bool
+}
+
 type Monitor struct {
-	packetChan   <-chan Packet
-	influxClient influxdb2.Client
-	writeAPI     api.WriteAPIBlocking
+	packetChan <-chan Packet
+	localStore store.Store
 }
 
-func NewMonitor(c <-chan Packet, influxURL, influxUser, influxPass, influxOrg, influxBucket string) *Monitor {
-	influxclient := influxdb2.NewClient(influxURL, fmt.Sprintf("%s:%s", influxUser, influxPass))
-	return &Monitor{
-		packetChan:   c,
-		influxClient: influxclient,
-		writeAPI:     influxclient.WriteAPIBlocking(influxOrg, influxBucket),
+func NewMonitor(c <-chan Packet, dbName string) *Monitor {
+	if dbName != "" {
+		storeL := localStore.InitSqlStore(dbName)
+		p := Packet{}
+		pMap := make(map[string]interface{})
+		pMap["LinkType"] = p.LinkType
+		pMap["SrcMAC"] = p.SrcMAC
+		pMap["DstMAC"] = p.DstMAC
+		pMap["NetworkType"] = p.NetworkType
+		pMap["SrcIP"] = p.SrcIP
+		pMap["DstIP"] = p.DstIP
+		pMap["TransportType"] = p.TransportType
+		pMap["SrcPort"] = p.SrcPort
+		pMap["DstPort"] = p.DstPort
+		pMap["PayloadSize"] = p.PayloadSize
+		pMap["Application"] = p.Application
+		pMap["IsMalformed"] = p.IsMalformed
+		pMap["ARPInfo"] = p.ARPInfo
+		pMap["SCTPInfo"] = p.SCTPInfo
+		pMap["IsSYN"] = p.IsSYN
+		pMap["IsSYNACK"] = p.IsSYNACK
+		storeL.CreateTable(*store.NewPoint(time.Now(), pMap))
+		return &Monitor{
+			packetChan: c,
+			localStore: storeL,
+		}
+	} else {
+		return &Monitor{
+			packetChan: c,
+		}
 	}
 }
 
-func (m *Monitor) Start() {
-	chP := make(chan Packet, 100)
-	go m.Prometheus(chP)
+func (m *Monitor) Start(cfg Config) {
+	var chP chan Packet
+	var chL chan Packet
+	if cfg.UsePrometheus {
+		chP := make(chan Packet, 100)
+		go m.collectPrometheus(chP)
+		defer close(chP)
+	}
+	if m.localStore != nil {
+		chL := make(chan Packet, 100)
+		go m.Local(chL)
+		defer close(chL)
+		defer m.localStore.Close()
+	}
 	for p := range m.packetChan {
-		chP <- p
+		if cfg.UsePrometheus {
+			chP <- p
+		}
+		if m.localStore != nil {
+			chL <- p
+		}
 	}
-	defer m.influxClient.Close()
 }
 
-func (m *Monitor) Prometheus(cp <-chan Packet) {
+func (m *Monitor) collectPrometheus(cp <-chan Packet) {
 	for p := range cp {
 		packetCount.Inc()
 		trafficTotal.Add(float64(p.PayloadSize))
@@ -105,24 +146,24 @@ func (m *Monitor) Prometheus(cp <-chan Packet) {
 			} else if p.IsSYN {
 				synAckCounterVec.WithLabelValues("syn").Inc()
 			}
-			portSrc.WithLabelValues(string(p.SrcPort)).Inc()
-			portDst.WithLabelValues(string(p.DstPort)).Inc()
-			trafficPortSrc.WithLabelValues(string(p.SrcPort)).Add(float64(p.PayloadSize))
-			trafficPortDst.WithLabelValues(string(p.DstPort)).Add(float64(p.PayloadSize))
+			portSrc.WithLabelValues(fmt.Sprint(p.SrcPort)).Inc()
+			portDst.WithLabelValues(fmt.Sprint(p.DstPort)).Inc()
+			trafficPortSrc.WithLabelValues(fmt.Sprint(p.SrcPort)).Add(float64(p.PayloadSize))
+			trafficPortDst.WithLabelValues(fmt.Sprint(p.DstPort)).Add(float64(p.PayloadSize))
 		}
 		if p.TransportType == UDP {
 			udpCount.Inc()
-			portSrc.WithLabelValues(string(p.SrcPort)).Inc()
-			portDst.WithLabelValues(string(p.DstPort)).Inc()
-			trafficPortSrc.WithLabelValues(string(p.SrcPort)).Add(float64(p.PayloadSize))
-			trafficPortDst.WithLabelValues(string(p.DstPort)).Add(float64(p.PayloadSize))
+			portSrc.WithLabelValues(fmt.Sprint(p.SrcPort)).Inc()
+			portDst.WithLabelValues(fmt.Sprint(p.DstPort)).Inc()
+			trafficPortSrc.WithLabelValues(fmt.Sprint(p.SrcPort)).Add(float64(p.PayloadSize))
+			trafficPortDst.WithLabelValues(fmt.Sprint(p.DstPort)).Add(float64(p.PayloadSize))
 		}
 		if p.SCTPInfo != nil {
-			portSrc.WithLabelValues(string(p.SCTPInfo.SrcPort)).Inc()
-			portDst.WithLabelValues(string(p.SCTPInfo.DstPort)).Inc()
+			portSrc.WithLabelValues(fmt.Sprint(p.SCTPInfo.SrcPort)).Inc()
+			portDst.WithLabelValues(fmt.Sprint(p.SCTPInfo.DstPort)).Inc()
 
-			trafficPortSrc.WithLabelValues(string(p.SCTPInfo.SrcPort)).Add(float64(p.PayloadSize))
-			trafficPortDst.WithLabelValues(string(p.SCTPInfo.DstPort)).Add(float64(p.PayloadSize))
+			trafficPortSrc.WithLabelValues(fmt.Sprint(p.SCTPInfo.SrcPort)).Add(float64(p.PayloadSize))
+			trafficPortDst.WithLabelValues(fmt.Sprint(p.SCTPInfo.DstPort)).Add(float64(p.PayloadSize))
 		}
 
 		if p.NetworkType == IPv4 || p.NetworkType == IPv6 {
@@ -132,38 +173,27 @@ func (m *Monitor) Prometheus(cp <-chan Packet) {
 	}
 }
 
-func (m *Monitor) monitoringPacket(cp <-chan Packet) {
+// нужно переделать метод хранения метрик. Нужно хранить сразу подсчитанное значение за секунду.
+// Это ускорит программу(меньше )
+func (m *Monitor) Local(cp <-chan Packet) {
+	pMap := make(map[string]interface{})
 	for p := range cp {
-		tags := map[string]string{
-			"src_port": fmt.Sprint(p.SrcPort),
-			"dst_port": fmt.Sprint(p.DstPort),
-			"src_ip":   p.SrcIP.String(),
-			"dst_ip":   p.DstIP.String(),
-		}
-		fields := map[string]interface{}{
-			"packet_count":  1,
-			"payload_size":  float64(p.PayloadSize),
-			"tcp_count":     0,
-			"udp_count":     0,
-			"traffic_total": float64(p.PayloadSize),
-		}
-
-		if p.TransportType == TCP {
-			fields["tcp_count"] = 1
-		}
-		if p.TransportType == UDP {
-			fields["udp_count"] = 1
-		}
-
-		point := influxdb2.NewPoint(
-			"packetsleuth_metrics",
-			tags,
-			fields,
-			time.Now(), // Временная метка
-		)
-		err := m.writeAPI.WritePoint(context.Background(), point)
-		if err != nil {
-			log.Printf("Error writing to InfluxDB: %v", err)
-		}
+		pMap["LinkType"] = p.LinkType
+		pMap["SrcMAC"] = p.SrcMAC
+		pMap["DstMAC"] = p.DstMAC
+		pMap["NetworkType"] = p.NetworkType
+		pMap["SrcIP"] = p.SrcIP
+		pMap["DstIP"] = p.DstIP
+		pMap["TransportType"] = p.TransportType
+		pMap["SrcPort"] = p.SrcPort
+		pMap["DstPort"] = p.DstPort
+		pMap["PayloadSize"] = p.PayloadSize
+		pMap["Application"] = p.Application
+		pMap["IsMalformed"] = p.IsMalformed
+		pMap["ARPInfo"] = p.ARPInfo
+		pMap["SCTPInfo"] = p.SCTPInfo
+		pMap["IsSYN"] = p.IsSYN
+		pMap["IsSYNACK"] = p.IsSYNACK
+		m.localStore.WritePoint(*store.NewPoint(p.TimeStamp, pMap))
 	}
 }

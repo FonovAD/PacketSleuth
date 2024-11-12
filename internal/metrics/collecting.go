@@ -26,7 +26,7 @@ const (
 )
 
 type MetricMonitor struct {
-	devices []pcap.Interface
+	Devices []pcap.Interface
 }
 
 type Packet struct {
@@ -66,21 +66,20 @@ func NewPacketMonitor() *MetricMonitor {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	return &MetricMonitor{
-		devices: devices,
+		Devices: devices,
 	}
 }
 
 func (m *MetricMonitor) Listen() <-chan Packet {
 	pchan := make(chan Packet, PacketChanSize)
-	for _, device := range m.devices {
-		go capturePackets(device.Name, pchan)
+	for _, device := range m.Devices {
+		go CapturePackets(device.Name, pchan)
 	}
 	return pchan
 }
 
-func capturePackets(deviceName string, pchan chan<- Packet) {
+func CapturePackets(deviceName string, pchan chan<- Packet) {
 	handle, err := pcap.OpenLive(deviceName, PacketMaxSize, true, pcap.BlockForever)
 	if err != nil {
 		log.Printf("Error opening the device %s: %v", deviceName, err)
@@ -89,14 +88,14 @@ func capturePackets(deviceName string, pchan chan<- Packet) {
 	defer handle.Close()
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSource.Packets() {
-		packetInfo := processPacket(packet)
+		packetInfo := ProcessPacket(packet)
 		if packetInfo != nil {
 			pchan <- *packetInfo
 		}
 	}
 }
 
-func getDNSLayer(packet gopacket.Packet) *layers.DNS {
+func GetDNSLayer(packet gopacket.Packet) *layers.DNS {
 	var dns layers.DNS
 	err := dns.DecodeFromBytes(packet.Layer(layers.LayerTypeDNS).LayerContents(), gopacket.NilDecodeFeedback)
 	if err == nil {
@@ -105,7 +104,7 @@ func getDNSLayer(packet gopacket.Packet) *layers.DNS {
 	return nil
 }
 
-func processPacket(packet gopacket.Packet) *Packet {
+func ProcessPacket(packet gopacket.Packet) *Packet {
 	packetInfo := &Packet{}
 
 	linkLayer := packet.LinkLayer()
@@ -170,7 +169,7 @@ func processPacket(packet gopacket.Packet) *Packet {
 			packetInfo.PayloadSize = len(layer.Payload)
 
 			if packetInfo.SrcPort == 53 || packetInfo.DstPort == 53 {
-				if dnsLayer := getDNSLayer(packet); dnsLayer != nil {
+				if dnsLayer := GetDNSLayer(packet); dnsLayer != nil {
 					packetInfo.Application = DNS
 				}
 			}

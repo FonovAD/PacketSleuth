@@ -14,8 +14,8 @@ func main() {
 	cfg.ParseConfigWithDefaults()
 
 	cPacket := metrics.NewPacketMonitor()
-	m := metrics.NewMonitor(cPacket.Listen(), cfg.influxURL, cfg.influxUser, cfg.influxPass, cfg.influxOrg, cfg.influxBucket)
-	go m.Start()
+	m := metrics.NewMonitor(cPacket.Listen(), "MyDB")
+	go m.Start(metrics.Config{UsePrometheus: true})
 	http.Handle("/metrics", promhttp.Handler())
 	log.Fatal(http.ListenAndServe(":2112", nil))
 }
